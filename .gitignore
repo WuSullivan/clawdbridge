@@ -1,0 +1,16 @@
+.build/
+dist/
+.DS_Store
+*.xcworkspace
+*.xcuserdata
+*.ipa
+*.apk
+android/.android-sdk/
+android/.jdk17/
+android/.jdk17.tar.gz
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+*.jks
+*.keystore
