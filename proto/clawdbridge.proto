@@ -1,0 +1,119 @@
+// ClawdBridge 通信协议定义（参考文档，非编译产物）
+// 用于 Mac / iOS / Android 三方保持序列化格式一致
+
+// ═══════════════════════════════════════════════════
+// 1. 消息格式：带长度前缀的变长帧
+// ═══════════════════════════════════════════════════
+//
+// [4 bytes: 大端序 uint32 payload 长度] [N bytes: JSON or Encrypted payload]
+// 最大单帧长度：100MB
+//
+
+// ═══════════════════════════════════════════════════
+// 2. 握手消息（Plain JSON，首次连接时交换）
+// ═══════════════════════════════════════════════════
+//
+// {
+//   "type": "handshake",
+//   "version": 1,
+//   "deviceID": "uuid-string",
+//   "deviceName": "My MacBook Air",
+//   "platform": "mac" | "ios" | "android",
+//   "port": 45455
+// }
+//
+
+// ═══════════════════════════════════════════════════
+// 3. 剪贴板载荷（ClipPayload, JSON → Encrypted → Send）
+// ═══════════════════════════════════════════════════
+//
+// {
+//   "version": 1,
+//   "deviceID": "uuid-string",
+//   "timestamp": 1754146467000,       // epoch ms
+//   "type": "text" | "fileAnnounce" | "fileChunk" | "fileComplete",
+//
+//   // text mode:
+//   "data": "base64-encoded-utf8-text",
+//
+//   // file announce:
+//   "fileName": "document.pdf",
+//   "fileSize": 1420000,
+//   "totalChunks": 22,
+//
+//   // file chunk:
+//   "fileName": "document.pdf",
+//   "chunkIndex": 5,
+//   "totalChunks": 22,
+//   "data": "base64-encoded-64KB-chunk",
+//
+//   // file complete:
+//   "fileName": "document.pdf",
+//   "fileSize": 1420000
+// }
+//
+// 加密方案：AES-256-GCM
+//   - IV: 12 bytes random, prepended to ciphertext
+//   - Tag: 16 bytes GCM tag, appended after ciphertext
+//   - Key: 256-bit, derived via PBKDF2(6-digit PIN, salt, 100k rounds) or
+//           randomly generated and exchanged after PIN pairing
+//
+// 加密后的帧格式：
+//   [4 bytes length] [12 bytes IV] [ciphertext] [16 bytes GCM tag]
+//
+
+// ═══════════════════════════════════════════════════
+// 4. UDP 发现协议（Plain JSON, port 45454）
+// ═══════════════════════════════════════════════════
+//
+// 广播宣告:
+// {
+//   "type": "announce",
+//   "deviceID": "uuid-string",
+//   "deviceName": "Pixel 8",
+//   "platform": "android"
+// }
+//
+// PIN 请求 (Android → Mac):
+// {
+//   "type": "pin_request",
+//   "deviceID": "android-uuid",
+//   "pin": "123456"
+// }
+//
+// PIN 响应 (Mac → Android):
+// {
+//   "type": "pin_response",
+//   "deviceID": "mac-uuid",
+//   "accepted": true,
+//   "sharedKey": "base64-256-bit-key"   // only if accepted
+// }
+//
+
+// ═══════════════════════════════════════════════════
+// 5. 设备信任规则
+// ═══════════════════════════════════════════════════
+//
+// Apple ↔ Apple (Bonjour):
+//   → 自动信任，共享剪贴板立即同步
+//
+// Android ↔ Mac (UDP + PIN):
+//   → 6 位数字 PIN 验证 → 交换对称密钥 → 信任建立
+//
+// iOS ↔ Mac (Bonjour):
+//   → 同一 Apple ID → 自动信任
+//
+// iOS ↔ Android (via Mac relay):
+//   → 双方都需要先与 Mac 配对
+//   → Mac 检测剪贴板变更 → 转发给另一端
+//
+
+// ═══════════════════════════════════════════════════
+// 6. 端口分配
+// ═══════════════════════════════════════════════════
+//
+// UDP 发现广播: 45454
+// TCP (Bonjour) 默认: 45455
+// TCP (Android) 默认: 45455
+//
+// 所有端口仅在局域网内使用，无需端口转发。

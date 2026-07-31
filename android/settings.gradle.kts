@@ -5,7 +5,7 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-dependencyResolutionManagement {
+dependencyResolution {
     repositories {
         google()
         mavenCentral()

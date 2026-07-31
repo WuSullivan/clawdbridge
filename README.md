@@ -1,103 +1,136 @@
-# ClawdBridge 🐾
+# 🦞 ClawdBridge
 
-> 复制即同步 · 零操作 · 全平台
+**局域网零交互剪贴板 & 文件同步工具**
 
-Mac ↔ iPhone ↔ Android 剪贴板全自动同步。**不弹窗、不打断、不费电。**
+复制即同步。不弹窗，不通知，纯后台。
 
-## 核心理念
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Apple Handoff 掉链子？ClawdBridge 替代它。
+---
 
-- **零点击**：复制完，对方直接粘贴。没有"发送"按钮、没有确认框
-- **零弹窗**：没有任何传输提示、进度条、通知
-- **极低占用**：Mac 端仅 **142KB**，空闲 CPU 0%，内存 < 10MB
-- **局域网直连**：数据不出你的网络，不依赖任何服务器
+## 为什么选择 ClawdBridge？
 
-## 平台支持
+| | ClawdBridge | 苹果 Handoff | LocalSend |
+|---|---|---|---|
+| 复制即同步 | ✅ | ⚠️ 间歇断连 | ❌ 需手动选择 |
+| 无弹窗 | ✅ | ✅ | ❌ |
+| 跨平台 (Mac/Android) | ✅ | ❌ | ✅ |
+| 蓝牙直连 (Mac↔iOS) | ✅ | ✅ | ❌ |
+| 按需传输（省电） | ✅ | ❌ | ❌ |
+| 开源 | ✅ | ❌ | ✅ |
 
-| 平台 | 状态 | 安装方式 |
-|------|:----:|---------|
-| macOS | ✅ Ready | 双击运行 / launchd 开机自启 |
-| iOS | 🚧 开发中 | SideStore 侧载 |
-| Android | 🚧 开发中 | APK 直装 |
+## 核心特性
 
-## 配对方式
+- **按需传输**：复制时不传输，粘贴时才拉取数据。平时极低功耗待机
+- **蓝牙直连**：Mac ↔ iOS 通过 BLE 通信，无需 Wi-Fi
+- **局域网直连**：Mac ↔ Android 通过 TCP，数据不经过公网
+- **大文件确认**：超过 3MB 的文件弹窗确认后才传输
+- **最新覆盖**：最新复制的内容始终覆盖旧的
+- **自动信任**：同一 Apple ID 下设备自动配对
+- **支持类型**：文字、图片、视频、文件
 
-| | Mac ↔ iOS | Android ↔ 任意 |
-|---|---|---|
-| **方式** | iCloud 自动 | 6 位密码面对面 |
-| **操作** | 零操作，同 Apple ID 即连通 | 一方生成码，另一方输入 |
-| **协议** | Bonjour 自动发现 | UDP 广播配对 |
+## 平台
+
+| 平台 | 发现方式 | 连接方式 | 状态 |
+|---|---|---|---|
+| **macOS** | Bonjour + BLE + UDP | TCP / BLE | ✅ 通过编译 |
+| **iOS** | BLE | CoreBluetooth | 🚧 |
+| **Android** | UDP 广播 | TCP | 🚧 |
+
+互通拓扑：
+```
+     iOS ←─ BLE ─→ Mac ←─ TCP ─→ Android
+```
+
+> iOS 通过 Mac 中继与 Android 通信。
 
 ## 快速开始
 
-### Mac
+### macOS
 
 ```bash
-# 编译
-git clone https://github.com/loongcabin/clawdbridge
+git clone https://github.com/WuSullivan/clawdbridge.git
 cd clawdbridge
-swift build -c release
+./build.sh --mac
 
-# 运行
-.build/arm64-apple-macosx/release/ClawdBridge
+# 安装
+sudo cp build/mac/clawdbridge /usr/local/bin/
 
-# 开机自启
-.build/arm64-apple-macosx/release/ClawdBridge --install
+# 开机自启（可选）
+cp build/mac/clawdbridge.plist ~/Library/LaunchAgents/com.clawdbridge.daemon.plist
+launchctl load ~/Library/LaunchAgents/com.clawdbridge.daemon.plist
 ```
-
-### Android
-
-下载最新 [APK](https://github.com/loongcabin/clawdbridge/releases)，安装后：
-1. 看完教程（如何保活）
-2. 生成 / 输入 6 位配对码
-3. 完成。复制任何文字，对方直接粘贴
 
 ### iOS
 
-1. 通过 SideStore 安装 IPA
-2. 打开一次，看完教程
-3. Mac 在同一 Wi-Fi 下自动发现
-4. 后台会自动保活（BGTaskScheduler）
-
-## 技术架构
-
-```
-┌─────────┐    HTTP :18763    ┌─────────┐    HTTP :18763    ┌──────────┐
-│   Mac   │◄──────────────────►│  iPhone  │◄──────────────────►│ Android  │
-│  Swift  │    Bonjour 发现    │  Swift   │    UDP 配对码     │  Kotlin  │
-└─────────┘                    └─────────┘                    └──────────┘
-     │                              │                              │
-     └──────────────────────────────┴──────────────────────────────┘
-                          同一局域网 · 直连 · 无服务器
-```
-
-## 协议
-
-- 剪贴板文本：`POST /clip` → body = UTF-8 文本
-- 文件传输：`POST /file` → body = 原始字节，header `X-Filename`
-- 配对码：UDP `:18764`，发送 `PAIR <6位码>`，回复 `PAIR_OK`
-- 服务发现：Bonjour `_clawdbridge._tcp`
-
-## 限制
-
-- 仅同一局域网可用（Wi-Fi / 热点均可）
-- 初期仅文字，文件传输开发中
-- iOS 需侧载（App Store 不允许此类后台行为）
-
-## 开发
+通过 **SideStore** 侧载 IPA：
 
 ```bash
-# Mac
-swift build
+./build.sh --ios    # 需要 Xcode
+```
 
-# iOS
-cd iOS && xcodegen generate && open ClawdBridge.xcodeproj
+**后台保活设置**（重要）：
 
-# Android
-cd android && ./gradlew assembleDebug
+1. 打开「**设置** → 通用 → 后台 App 刷新」
+2. 确保 ClawdBridge 开关为开启
+3. **不要**从后台手动划掉 App
+
+### Android
+
+```bash
+./build.sh --android
+# APK: build/android/clawdbridge.apk
+```
+
+将 APK 传输到 Android 设备安装即可。
+
+## 工作原理
+
+```
+用户复制文本 / 图片 / 文件
+    │
+    ▼
+本机剪贴板监听器轮询检测 changeCount（每 0.5 秒）
+    │
+    ▼
+打包为 ClipPayload（含 SHA256 去重 hash）
+    │
+    ▼
+┌─── ≤3MB：直接广播到所有已信任设备
+│
+└───  >3MB：弹窗确认后广播
+    │
+    ▼
+接收端写入剪贴板（覆盖旧内容）
+    粘贴时真正使用数据
+```
+
+### 传输协议
+
+| 路径 | 协议 | 端口/UUID |
+|---|---|---|
+| Mac ↔ iOS | BLE | 自定义 UUID |
+| Mac ↔ Mac | Bonjour + TCP | 45455 |
+| Mac ↔ Android | TCP（UDP 发现） | UDP 45454 / TCP 45455 |
+
+## 隐私 & 安全
+
+- ✅ 局域网 + 蓝牙直连，不经过互联网
+- ✅ 零追踪、零遥测、零云端存储
+- ✅ 开源 MIT 协议，代码可审计
+
+## 项目结构
+
+```
+clawdbridge/
+├── mac/               # macOS Swift SPM
+├── ios/               # iOS SwiftUI + UIKit
+├── android/           # Android Kotlin + Compose
+├── proto/             # 通信协议文档
+├── build.sh           # 一键构建
+└── .github/workflows/ # CI/CD
 ```
 
 ## License
 
-MIT — 自由使用，自由修改。
+[MIT](LICENSE) © WuSullivan

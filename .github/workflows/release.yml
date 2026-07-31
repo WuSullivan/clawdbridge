@@ -1,0 +1,133 @@
+name: Release Build
+
+# 打 tag（如 v1.0.0）时自动编译并上传 Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────────
+  # macOS 二进制
+  # ──────────────────────────────────────────────────
+  mac-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build release binary
+        run: |
+          cd mac
+          swift build -c release --arch arm64 --arch x86_64
+          bin_path=$(swift build -c release --show-bin-path)
+          mkdir -p ../build/mac
+          cp "$bin_path/clawdbridge" ../build/mac/
+          cp Resources/clawdbridge.plist ../build/mac/
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawdbridge-macos
+          path: build/mac/
+
+  # ──────────────────────────────────────────────────
+  # Android APK
+  # ──────────────────────────────────────────────────
+  android-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawdbridge-android
+          path: android/app/build/outputs/apk/release/*.apk
+
+  # ──────────────────────────────────────────────────
+  # iOS IPA (unsighed — for SideStore)
+  # ──────────────────────────────────────────────────
+  ios-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build unsigned IPA
+        run: |
+          cd ios
+          xcodebuild archive \
+            -project ClawdBridge.xcodeproj \
+            -scheme ClawdBridge \
+            -archivePath ../build/ios/ClawdBridge.xcarchive \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+          mkdir -p ../build/ios/Payload
+          cp -R ../build/ios/ClawdBridge.xcarchive/Products/Applications/ClawdBridge.app ../build/ios/Payload/
+          cd ../build/ios
+          zip -qr ClawdBridge.ipa Payload
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawdbridge-ios
+          path: build/ios/ClawdBridge.ipa
+
+  # ──────────────────────────────────────────────────
+  # GitHub Release
+  # ──────────────────────────────────────────────────
+  release:
+    needs: [mac-build, android-build, ios-build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: clawdbridge-*
+          path: release/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          # macOS
+          cp release/clawdbridge-macos/clawdbridge release-assets/ 2>/dev/null || true
+          cp release/clawdbridge-macos/clawdbridge.plist release-assets/ 2>/dev/null || true
+          # Android
+          find release/clawdbridge-android -name "*.apk" -exec cp {} release-assets/clawdbridge-android.apk \; 2>/dev/null || true
+          # iOS
+          cp release/clawdbridge-ios/ClawdBridge.ipa release-assets/ 2>/dev/null || true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

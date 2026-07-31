@@ -1,16 +1,46 @@
-.build/
-dist/
+# macOS
 .DS_Store
-*.xcworkspace
-*.xcuserdata
-*.ipa
+.macos/
+.build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+Pods/
+
+# Swift
+Package.resolved
+.build/
+
+# macOS app bundle
+*.app
+
+# Android
+.gradle/
+build/
 *.apk
-android/.android-sdk/
-android/.jdk17/
-android/.jdk17.tar.gz
-android/.gradle/
-android/app/build/
-android/build/
-android/local.properties
-*.jks
-*.keystore
+*.aab
+local.properties
+.idea/
+*.iml
+
+# iOS
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# ClawdBridge runtime
+~/Library/Application Support/ClawdBridge/
+
+# Secrets / config
+*.env
+*.p12
+*.mobileprovision

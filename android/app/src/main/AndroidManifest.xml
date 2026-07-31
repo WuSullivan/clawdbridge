@@ -1,42 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 网络权限：局域网通信 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- 前台服务保活 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- 剪贴板（无通知读取，Android 10+ 限制仅前台应用可读取） -->
+    <!-- 前台服务可在后台读取剪贴板 -->
+
+    <!-- 文件读写 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <!-- 禁止休眠 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:name=".ClawdBridgeApp"
+        android:allowBackup="false"
         android:label="ClawdBridge"
         android:supportsRtl="true"
         android:theme="@style/Theme.ClawdBridge">
 
+        <!-- 主 Activity：仅用于教程页面 + 配对页面 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.ClawdBridge">
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <!-- 配对 Activity：显示 PIN 码等 -->
+        <activity
+            android:name=".pairing.PairingActivity"
+            android:exported="false"
+            android:excludeFromRecents="true" />
+
+        <!-- 教程 Activity：首次启动一次性展示 -->
+        <activity
+            android:name=".tutorial.TutorialActivity"
+            android:exported="false" />
+
+        <!-- 前台服务：后台保活 -->
         <service
-            android:name=".ClipboardService"
+            android:name=".service.BridgeService"
             android:foregroundServiceType="specialUse"
             android:exported="false" />
 
-        <receiver
-            android:name=".BootReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
     </application>
 </manifest>
