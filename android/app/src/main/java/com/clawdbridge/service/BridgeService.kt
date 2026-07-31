@@ -4,46 +4,69 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.lifecycle.LifecycleService
 import com.clawdbridge.MainActivity
+import com.clawdbridge.network.TCPClient
+import com.clawdbridge.network.UDPDiscovery
+import com.clawdbridge.sync.ClipboardSync
+import com.clawdbridge.sync.FileTransfer
+import java.io.File
 
-/// 前台服务：后台保活 + 开机自启
-/// 使用 notification 维持前台状态，避免被系统回收
+/**
+ * Android 前台服务：后台保活 + 剪贴板同步引擎
+ * 无声音/震动通知（IMPORTANCE_LOW）
+ */
 class BridgeService : LifecycleService() {
 
     companion object {
         const val CHANNEL_ID = "clawdbridge_service"
         const val NOTIFICATION_ID = 1
+        private const val TAG = "BridgeService"
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var clipboardSync: ClipboardSync? = null
+    private var tcpClient: TCPClient? = null
+    private var udpDiscovery: UDPDiscovery? = null
+    private var fileTransfer: FileTransfer? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         acquireWakeLock()
-
-        android.util.Log.i("ClawdBridge", "BridgeService created")
-
-        // Start clipboard sync
-        // Start UDP discovery
-        // Start TCP server
+        Log.i(TAG, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Start as foreground service with persistent notification
         val notification = buildNotification()
         startForeground(NOTIFICATION_ID, notification)
+        Log.i(TAG, "Foreground service started")
 
-        // Boot completed: auto-start
-        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            android.util.Log.i("ClawdBridge", "Auto-starting after boot")
+        // File transfer cache
+        val cacheDir = File(cacheDir, "staged")
+        cacheDir.mkdirs()
+        fileTransfer = FileTransfer(cacheDir)
+
+        // Clipboard sync → TCP client
+        clipboardSync = ClipboardSync(this) { data ->
+            tcpClient?.send(data)
         }
+        clipboardSync?.start()
+
+        // TCP client for Mac↔Android
+        tcpClient = TCPClient()
+        tcpClient?.onPayloadReceived = { data ->
+            clipboardSync?.onRemotePayload(data)
+        }
+
+        // UDP discovery for LAN auto-detection
+        udpDiscovery = UDPDiscovery()
+        udpDiscovery?.start()
 
         return START_STICKY
     }
@@ -51,22 +74,27 @@ class BridgeService : LifecycleService() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        clipboardSync?.stop()
+        tcpClient?.disconnect()
+        udpDiscovery?.stop()
         releaseWakeLock()
-        android.util.Log.i("ClawdBridge", "BridgeService destroyed")
+        Log.i(TAG, "Service destroyed")
         super.onDestroy()
     }
 
-    // ── Notification Channel ──
+    // ── Notification ──
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "ClawdBridge 服务",
-                NotificationManager.IMPORTANCE_LOW  // LOW = 不发出声音/震动
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "后台剪贴板同步服务"
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -87,6 +115,7 @@ class BridgeService : LifecycleService() {
                 .setSmallIcon(android.R.drawable.ic_menu_share)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
+                .setSilent(true)
                 .build()
         } else {
             @Suppress("DEPRECATION")
@@ -96,11 +125,12 @@ class BridgeService : LifecycleService() {
                 .setSmallIcon(android.R.drawable.ic_menu_share)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
+                .setPriority(Notification.PRIORITY_MIN)
                 .build()
         }
     }
 
-    // ── Wake Lock (prevent deep sleep) ──
+    // ── WakeLock ──
 
     private fun acquireWakeLock() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
@@ -108,7 +138,7 @@ class BridgeService : LifecycleService() {
             PowerManager.PARTIAL_WAKE_LOCK,
             "ClawdBridge::Wakelock"
         ).apply {
-            acquire(10 * 60 * 1000L) // 10 minutes, auto-renewed
+            acquire(10 * 60 * 1000L)
         }
     }
 
